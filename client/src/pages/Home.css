@@ -1,0 +1,61 @@
+.home {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    margin: 0;
+    align-items: center;
+}
+
+.home img.leash{
+    position: absolute;
+    top: -60px;
+    left: -20px;
+    width: 250px;
+    translate: 0 0;
+}
+
+.home img.cat{
+    position: absolute;
+    bottom: 0px;
+    right: 0px;
+    width: 250px;
+    translate: 0 0;
+}
+
+.home h1 {
+    font-size: 4em;
+    margin: 3rem auto 2rem auto;
+}
+
+.home .pets {
+    display: flex;
+    flex-direction: row;
+    gap: 1rem;
+    width: 75%;
+    height: 65vh;
+    flex-wrap: wrap;
+    overflow-y: scroll;
+    scrollbar-color: var(--red) var(--tertiary);
+    border-radius: 20px;
+}
+
+.cta-button {
+    padding: 12px 20px;
+    background-color: #84c55e;
+    color:#522f13;
+    border: 3px solid #522f13;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    width: 250px;
+    transition: all 0.2s ease;
+    margin: 2rem;
+}
+
+.cta-button:hover {
+    background-color:#ffd55b;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+}
+
