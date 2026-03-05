@@ -36,7 +36,7 @@
     flex-wrap: wrap;
     overflow-y: scroll;
     scrollbar-color: var(--red) var(--tertiary);
-    border-radius: 20px;
+    border-radius: 10px;
 }
 
 .cta-button {

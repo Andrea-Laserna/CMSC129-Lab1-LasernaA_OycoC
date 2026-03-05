@@ -98,9 +98,339 @@ npm run dev  # Runs on http://localhost:5173
 ### Environment Variables
 Create a `.env` file in the `server/` directory:
 ```
-MONGODB_URI=your_mongodb_connection_string
+MONGODB_URI=your_primary_mongodb_connection_string
+BACKUP_URI=your_backup_mongodb_connection_string
 PORT=5000
 ```
+
+#### Dual Database Setup (Primary + Backup)
+The application now supports **database redundancy** with automatic failover:
+
+**Primary Database:** Your main MongoDB Atlas cluster (normal read/write operations)
+**Backup Database:** Secondary MongoDB cluster for data replication and failover
+
+**Setup Instructions:**
+1. Create two MongoDB Atlas clusters (or one primary + one backup source)
+2. Add both connection strings to `.env`:
+   - `MONGODB_URI` → Primary cluster connection string
+   - `BACKUP_URI` → Backup cluster connection string
+3. Start the server - both databases will connect automatically
+
+**How It Works:**
+- All `CREATE` operations: Write to PRIMARY first, then sync to BACKUP
+- All `UPDATE` operations: Update PRIMARY first, then sync changes to BACKUP  
+- All `DELETE` operations: Delete from PRIMARY first, then sync deletion to BACKUP
+- All `READ` operations: Try PRIMARY first, if it fails, automatically read from BACKUP
+- **Failover is automatic** - no manual intervention needed when primary goes down
+
+### Soft Delete Feature
+The application implements **soft delete** for data recovery and audit trails:
+
+**What is Soft Delete?**
+- When you delete a pet record, it's NOT permanently removed from the database
+- The record is marked as `isDeleted: true` instead
+- This allows you to restore accidentally deleted records later
+- Provides an audit trail of all data changes
+
+**How It Works:**
+- **DELETE request:** Pet record is marked as deleted (flagged in database)
+- **GET requests:** Only return non-deleted records (filter out `isDeleted: false`)
+- **Deleted records:** Remain in database but hidden from normal view
+- **Data integrity:** Original data is preserved throughout its lifecycle
+
+**Data Recovery (Future Enhancement):**
+If you accidentally delete a pet, a recovery API endpoint can restore it by setting `isDeleted: false` again
+
+---
+
+## API Documentation
+
+Base URL: `http://localhost:5000/api`
+
+### Endpoints
+
+#### 1. Get All Pets
+Retrieves all non-deleted pet records from the database.
+
+**Endpoint:** `GET /api/pets`
+
+**Response:**
+- **Status 201:** Success
+```json
+{
+  "pets": [
+    {
+      "_id": "507f1f77bcf86cd799439011",
+      "name": "Buddy",
+      "species": "dog",
+      "breed": "Golden Retriever",
+      "age": 3,
+      "weight": 30,
+      "dateOfBirth": "2021-05-15T00:00:00.000Z",
+      "notes": "Loves to play fetch",
+      "isDeleted": false,
+      "createdAt": "2024-01-15T10:30:00.000Z",
+      "updatedAt": "2024-01-15T10:30:00.000Z",
+      "__v": 0
+    }
+  ]
+}
+```
+- **Status 500:** Both databases failed
+```json
+{
+  "error": "Both databases failed"
+}
+```
+
+**Failover Behavior:**
+- Attempts to fetch from PRIMARY database first
+- If PRIMARY fails, automatically switches to BACKUP database
+- Returns data from whichever database succeeds
+
+---
+
+#### 2. Get Single Pet
+Retrieves a specific pet record by its ID.
+
+**Endpoint:** `GET /api/:id`
+
+**Parameters:**
+- `id` (URL parameter) - MongoDB ObjectId of the pet
+
+**Example:** `GET /api/507f1f77bcf86cd799439011`
+
+**Response:**
+- **Status 201:** Success
+```json
+{
+  "pet": {
+    "_id": "507f1f77bcf86cd799439011",
+    "name": "Buddy",
+    "species": "dog",
+    "breed": "Golden Retriever",
+    "age": 3,
+    "weight": 30,
+    "dateOfBirth": "2021-05-15T00:00:00.000Z",
+    "notes": "Loves to play fetch",
+    "isDeleted": false,
+    "createdAt": "2024-01-15T10:30:00.000Z",
+    "updatedAt": "2024-01-15T10:30:00.000Z",
+    "__v": 0
+  }
+}
+```
+- **Status 404:** Pet not found or deleted
+```json
+{
+  "error": "No such pet"
+}
+```
+- **Status 500:** Both databases failed
+```json
+{
+  "error": "Both databases failed"
+}
+```
+
+**Failover Behavior:**
+- Attempts to fetch from PRIMARY database first
+- If PRIMARY fails, automatically switches to BACKUP database
+
+---
+
+#### 3. Create Pet
+Creates a new pet record in both PRIMARY and BACKUP databases.
+
+**Endpoint:** `POST /api/pets`
+
+**Request Body:**
+```json
+{
+  "name": "Buddy",
+  "species": "dog",
+  "breed": "Golden Retriever",
+  "age": 3,
+  "weight": 30,
+  "dateOfBirth": "2021-05-15",
+  "notes": "Loves to play fetch"
+}
+```
+
+**Required Fields:**
+- `name` (String) - Pet's name
+- `species` (String) - Must be one of: "dog", "cat", "bird", "rabbit", "other"
+- `breed` (String) - Pet's breed
+- `age` (Number) - Pet's age in years
+- `weight` (Number) - Pet's weight in kg
+- `dateOfBirth` (Date) - Pet's date of birth (ISO 8601 format)
+
+**Optional Fields:**
+- `notes` (String) - Additional notes about the pet
+
+**Response:**
+- **Status 201:** Success
+```json
+{
+  "message": "Pet record created successfully",
+  "pet": {
+    "_id": "507f1f77bcf86cd799439011",
+    "name": "Buddy",
+    "species": "dog",
+    "breed": "Golden Retriever",
+    "age": 3,
+    "weight": 30,
+    "dateOfBirth": "2021-05-15T00:00:00.000Z",
+    "notes": "Loves to play fetch",
+    "isDeleted": false,
+    "createdAt": "2024-01-15T10:30:00.000Z",
+    "updatedAt": "2024-01-15T10:30:00.000Z",
+    "__v": 0
+  }
+}
+```
+- **Status 400:** Missing required fields
+```json
+{
+  "message": "All required fields must be provided"
+}
+```
+- **Status 500:** Server error
+```json
+{
+  "message": "Error creating pet record"
+}
+```
+
+**Database Redundancy:**
+- Writes to PRIMARY database first
+- Immediately syncs the same record to BACKUP database
+- If backup write fails, logs warning but still returns success (PRIMARY succeeded)
+
+---
+
+#### 4. Update Pet
+Updates an existing pet record in both databases.
+
+**Endpoint:** `PATCH /api/:id`
+
+**Parameters:**
+- `id` (URL parameter) - MongoDB ObjectId of the pet to update
+
+**Example:** `PATCH /api/507f1f77bcf86cd799439011`
+
+**Request Body:** (all fields optional, only send fields you want to update)
+```json
+{
+  "age": 4,
+  "weight": 32,
+  "notes": "Now 4 years old, gained some weight"
+}
+```
+
+**Updatable Fields:**
+- `name` (String)
+- `species` (String)
+- `breed` (String)
+- `age` (Number)
+- `weight` (Number)
+- `dateOfBirth` (Date)
+- `notes` (String)
+
+**Response:**
+- **Status 201:** Success
+```json
+{
+  "pet": {
+    "_id": "507f1f77bcf86cd799439011",
+    "name": "Buddy",
+    "species": "dog",
+    "breed": "Golden Retriever",
+    "age": 4,
+    "weight": 32,
+    "dateOfBirth": "2021-05-15T00:00:00.000Z",
+    "notes": "Now 4 years old, gained some weight",
+    "isDeleted": false,
+    "createdAt": "2024-01-15T10:30:00.000Z",
+    "updatedAt": "2024-03-06T14:20:00.000Z",
+    "__v": 1
+  }
+}
+```
+- **Status 404:** Pet not found or invalid ID
+```json
+{
+  "error": "No such pet"
+}
+```
+- **Status 500:** Server error
+```json
+{
+  "error": "Error updating pet"
+}
+```
+
+**Database Redundancy:**
+- Updates PRIMARY database first
+- Immediately syncs the same changes to BACKUP database
+- If backup update fails, logs warning but still returns success
+
+---
+
+#### 5. Delete Pet (Soft Delete)
+Marks a pet record as deleted without removing it from the database.
+
+**Endpoint:** `DELETE /api/:id`
+
+**Parameters:**
+- `id` (URL parameter) - MongoDB ObjectId of the pet to delete
+
+**Example:** `DELETE /api/507f1f77bcf86cd799439011`
+
+**Response:**
+- **Status 201:** Success
+```json
+{
+  "message": "Pet record deleted successfully",
+  "pet": {
+    "_id": "507f1f77bcf86cd799439011",
+    "name": "Buddy",
+    "species": "dog",
+    "breed": "Golden Retriever",
+    "age": 4,
+    "weight": 32,
+    "dateOfBirth": "2021-05-15T00:00:00.000Z",
+    "notes": "Now 4 years old, gained some weight",
+    "isDeleted": true,
+    "createdAt": "2024-01-15T10:30:00.000Z",
+    "updatedAt": "2024-03-06T15:00:00.000Z",
+    "__v": 2
+  }
+}
+```
+- **Status 404:** Pet not found, already deleted, or invalid ID
+```json
+{
+  "error": "No such pet"
+}
+```
+- **Status 500:** Server error
+```json
+{
+  "error": "Error deleting pet"
+}
+```
+
+**Soft Delete Behavior:**
+- Sets `isDeleted: true` in the pet record
+- Does NOT permanently remove the record from database
+- Deleted records are hidden from GET requests
+- Data remains in database for recovery and audit purposes
+
+**Database Redundancy:**
+- Marks as deleted in PRIMARY database first
+- Immediately syncs the deletion flag to BACKUP database
+- If backup update fails, logs warning but still returns success
 
 ---
 
@@ -130,11 +460,52 @@ npm install axios  # Ensure axios is installed for API calls
 
 ### Step 2: Database Configuration
 
-#### 2.1 MongoDB Setup
-1. The `server/.env` file contains your MongoDB connection string
-2. Ensure your MongoDB Atlas cluster is running and accessible
-3. The connection is established through the `connectDB` function in `server/config/db.js`
-4. Whitelist your IP address in MongoDB Atlas network access settings
+#### 2.1 Primary and Backup MongoDB Setup
+1. The `server/.env` file contains both MongoDB connection strings:
+   - `MONGODB_URI` - Your primary MongoDB Atlas cluster connection string
+   - `BACKUP_URI` - Your backup MongoDB Atlas cluster connection string
+2. Both clusters should be running and accessible
+3. Both connections are established in `server/config/db.js`:
+   - `connectDB()` function creates connections to both databases
+   - Exports `getPrimaryDB()` and `getBackupDB()` helper functions
+4. **Important:** Whitelist your IP address in MongoDB Atlas Network Access settings for BOTH clusters
+
+#### 2.2 Database Redundancy Architecture
+```
+Your Application
+      ↓
+   [Express Server]
+      ↓
+   ┌──────────────────────┐
+   │  petController.js    │
+   │  (Dual-Write Logic)  │
+   └──────────────────────┘
+      ↙                ↘
+  PRIMARY DB      BACKUP DB
+(MongoDB #1)     (MongoDB #2)
+
+CREATE/UPDATE/DELETE: Write to PRIMARY, sync to BACKUP
+READ: Try PRIMARY, if fails → use BACKUP (automatic failover)
+```
+
+#### 2.3 Testing Database Failover
+To test the automatic failover mechanism:
+
+1. **Test Write Operations (Create/Update/Delete):**
+   - Create a new pet via the app
+   - Both primary and backup databases should have the same data
+   - Check MongoDB Atlas - both clusters should contain the new pet record
+
+2. **Test Read Failover:**
+   - Keep the app running
+   - Disable/stop your PRIMARY database connection (pause cluster in MongoDB Atlas)
+   - Try to read/fetch pets from the app
+   - The app should automatically fetch from BACKUP database
+   - You'll see console message: `"Primary DB failed, switching to backup"`
+
+3. **Re-enable Primary:**
+   - Resume your primary database cluster
+   - The app will automatically use primary again on next request
 
 ### Step 3: Backend Implementation Flow
 
@@ -152,16 +523,39 @@ Defines the Pet schema with the following fields:
 - `weight` (Number, required)
 - `dateOfBirth` (Date, required)
 - `notes` (String, optional)
+- `isDeleted` (Boolean, default: false) - Soft delete flag: marks deleted records without removing them
 - Includes automatic `timestamps` (createdAt, updatedAt)
 
-#### 3.3 Controller Logic (`server/middleware/petController.js`)
-The `createPet` function handles the business logic:
-1. Extracts form data from `req.body`
-2. Validates all required fields
-3. Creates new Pet document using the Pet model
-4. Saves to MongoDB database
-5. Returns JSON response with success message and pet data
-6. Catches and returns errors with appropriate status codes
+#### 3.3 Controller Logic with Dual-Database Support (`server/middleware/petController.js`)
+
+**GET operations (getPets, getPet):**
+1. Try to fetch from PRIMARY database using Mongoose
+2. If PRIMARY fails, automatically switch to BACKUP database
+3. Return data from whichever database succeeds
+4. If both fail, return error message
+
+**CREATE operation (createPet):**
+1. Saves new pet to PRIMARY database
+2. Extracts the saved pet's ID and data
+3. Simultaneously writes the same record to BACKUP database
+4. If backup sync fails, logs warning but still returns success (primary write succeeded)
+5. This ensures both databases stay synchronized
+
+**UPDATE operation (updatePet):**
+1. Updates pet record in PRIMARY database
+2. Applies the same updates to BACKUP database
+3. If backup sync fails, logs warning but still returns success
+4. Returns updated pet from primary database
+
+**DELETE operation (deletePet - Soft Delete):**
+1. Marks pet record as deleted in PRIMARY database by setting `isDeleted: true`
+2. Does NOT permanently remove the record from the database
+3. Applies the same soft delete flag to BACKUP database
+4. If backup sync fails, logs warning but still returns success
+5. Ensures both databases stay in sync during deletions
+6. Deleted records remain in database but are hidden from GET requests
+
+**Key Feature:** All write operations (CREATE/UPDATE/DELETE) are "dual-write" - they write to primary first, then immediately sync to backup. This ensures data consistency across both databases.
 
 #### 3.4 API Routes (`server/routes/route.js`)
 - Defines POST endpoint `/pets` that maps to `createPet` controller
