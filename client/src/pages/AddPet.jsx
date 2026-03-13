@@ -11,7 +11,6 @@ const AddPet = () => {
     breed: "",
     age: "",
     weight: "",
-    dateOfBirth: "",
     notes: "",
   });
   const [loading, setLoading] = useState(false);  // Disable button while submitting : Creating...
@@ -46,7 +45,6 @@ const AddPet = () => {
         breed: "",
         age: "",
         weight: "",
-        dateOfBirth: "",
         notes: "",
       });
     } catch (error) {
@@ -131,18 +129,6 @@ const AddPet = () => {
             required
             min="0"
             step="0.1"
-          />
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="dateOfBirth">Date of Birth *</label>
-          <input
-            type="date"
-            id="dateOfBirth"
-            name="dateOfBirth"
-            value={formData.dateOfBirth}
-            onChange={handleChange}
-            required
           />
         </div>
 

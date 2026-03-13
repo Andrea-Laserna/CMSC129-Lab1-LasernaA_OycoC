@@ -10,20 +10,11 @@ const PetModal = ({ pet, onClose, onUpdate }) => {
         breed: pet.breed,
         age: pet.age,
         weight: pet.weight,
-        dateOfBirth: pet.dateOfBirth?.split('T')[0] || '',
         notes: pet.notes || ''
     })
     const [isLoading, setIsLoading] = useState(false)
 
     if (!pet) return null;
-
-    const formatDate = (date) => {
-        return new Date(date).toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "long",
-            day: "numeric"
-        });
-    };
 
     const handleInputChange = (e) => {
         const { name, value } = e.target
@@ -34,14 +25,14 @@ const PetModal = ({ pet, onClose, onUpdate }) => {
     }
 
     const handleSave = async () => {
-        if (!editData.name || !editData.species || !editData.breed || !editData.age || !editData.weight || !editData.dateOfBirth) {
+        if (!editData.name || !editData.species || !editData.breed || !editData.age || !editData.weight) {
             alert('Please fill in all required fields')
             return
         }
 
         setIsLoading(true)
         try {
-            const response = await fetch(`http://localhost:5000/api/${pet._id}`, {
+            const response = await fetch(`http://localhost:5000/api/pets/${pet._id}`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json'
@@ -74,20 +65,19 @@ const PetModal = ({ pet, onClose, onUpdate }) => {
             breed: pet.breed,
             age: pet.age,
             weight: pet.weight,
-            dateOfBirth: pet.dateOfBirth?.split('T')[0] || '',
             notes: pet.notes || ''
         })
         setIsEditMode(false)
     }
 
     const handleDelete = async () => {
-        if (!window.confirm('Are you sure you want to delete this pet? This action cannot be undone.')) {
+        if (!window.confirm('Soft delete this pet? You can still restore it later.')) {
             return
         }
 
         setIsLoading(true)
         try {
-            const response = await fetch(`http://localhost:5000/api/${pet._id}`, {
+            const response = await fetch(`http://localhost:5000/api/pets/${pet._id}`, {
                 method: 'DELETE',
                 headers: {
                     'Content-Type': 'application/json'
@@ -106,6 +96,37 @@ const PetModal = ({ pet, onClose, onUpdate }) => {
         } catch (error) {
             console.error('Error deleting pet:', error)
             alert('Error deleting pet')
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    const handleHardDelete = async () => {
+        if (!window.confirm('Permanently delete this pet? This cannot be restored.')) {
+            return
+        }
+
+        setIsLoading(true)
+        try {
+            const response = await fetch(`http://localhost:5000/api/pets/${pet._id}/hard`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+
+            if (response.ok) {
+                console.log('Pet permanently deleted')
+                onClose()
+                if (onUpdate) {
+                    onUpdate(null)
+                }
+            } else {
+                alert('Failed to permanently delete pet')
+            }
+        } catch (error) {
+            console.error('Error permanently deleting pet:', error)
+            alert('Error permanently deleting pet')
         } finally {
             setIsLoading(false)
         }
@@ -180,16 +201,6 @@ const PetModal = ({ pet, onClose, onUpdate }) => {
                             </div>
                             
                             <div className="form-group">
-                                <label>Date of Birth *</label>
-                                <input
-                                    type="date"
-                                    name="dateOfBirth"
-                                    value={editData.dateOfBirth}
-                                    onChange={handleInputChange}
-                                />
-                            </div>
-                            
-                            <div className="form-group">
                                 <label>Notes</label>
                                 <textarea
                                     name="notes"
@@ -243,11 +254,6 @@ const PetModal = ({ pet, onClose, onUpdate }) => {
                                 <span className="info-value">{pet.weight} kg</span>
                             </div>
                             
-                            <div className="info-row">
-                                <span className="info-label">Date of Birth:</span>
-                                <span className="info-value">{formatDate(pet.dateOfBirth)}</span>
-                            </div>
-                            
                             {pet.notes && (
                                 <div className="info-row">
                                     <span className="info-label">Notes:</span>
@@ -257,7 +263,8 @@ const PetModal = ({ pet, onClose, onUpdate }) => {
                         </div>
 
                         <button className="btn-edit" onClick={() => setIsEditMode(true)}>Edit Pet</button>
-                        <button className="btn-delete" onClick={handleDelete}>Delete Pet</button>
+                        <button className="btn-delete" onClick={handleDelete} disabled={isLoading}>Soft Delete</button>
+                        <button className="btn-delete" onClick={handleHardDelete} disabled={isLoading}>Hard Delete</button>
                     </>
                 )}
             </div>

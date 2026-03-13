@@ -9,7 +9,6 @@ const AddPetModal = ({ onClose, onPetAdded }) => {
         breed: "",
         age: "",
         weight: "",
-        dateOfBirth: "",
         notes: "",
     })
     const [loading, setLoading] = useState(false)
@@ -48,7 +47,6 @@ const AddPetModal = ({ onClose, onPetAdded }) => {
                 breed: "",
                 age: "",
                 weight: "",
-                dateOfBirth: "",
                 notes: "",
             })
 
@@ -147,18 +145,6 @@ const AddPetModal = ({ onClose, onPetAdded }) => {
                             required
                             min="0"
                             step="0.1"
-                        />
-                    </div>
-
-                    <div className="form-group">
-                        <label htmlFor="dateOfBirth">Date of Birth *</label>
-                        <input
-                            type="date"
-                            id="dateOfBirth"
-                            name="dateOfBirth"
-                            value={formData.dateOfBirth}
-                            onChange={handleChange}
-                            required
                         />
                     </div>
 
