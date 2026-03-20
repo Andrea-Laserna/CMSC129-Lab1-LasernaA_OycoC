@@ -18,39 +18,42 @@ const Home = () => {
 
     // useState -> Let component remember values between renders
     const [pets, setPets] = useState([])
+    const [deletedPets, setDeletedPets] = useState([])
     const [selectedPet, setSelectedPet] = useState(null)
     const [showAddModal, setShowAddModal] = useState(false)
+    const [showBin, setShowBin] = useState(false)
+
+    const fetchActivePets = async () => {
+        try {
+            const response = await fetch('http://localhost:5000/api/pets')
+            const json = await response.json()
+            if (response.ok) {
+                setPets(json.pets || [])
+            }
+        } catch (error) {
+            console.error("Error fetching active pets:", error)
+        }
+    }
+
+    const fetchDeletedPets = async () => {
+        try {
+            const response = await fetch('http://localhost:5000/api/pets?deleted=true')
+            const json = await response.json()
+            if (response.ok) {
+                setDeletedPets(json.pets || [])
+            }
+        } catch (error) {
+            console.error("Error fetching deleted pets:", error)
+        }
+    }
+
+    const refreshLists = async () => {
+        await Promise.all([fetchActivePets(), fetchDeletedPets()])
+    }
 
     // useEffect -> Run code after component renders 
     useEffect(() => {
-        // Fetch pets from backend: SEND request
-        const fetchPets = async () => {
-            try {
-                console.log("Fetching from backend...")
-                // Send GET request to api/pets -> Found in router
-                const response = await fetch('http://localhost:5000/api/pets')
-                console.log("Response status:", response.status)
-                
-                const json = await response.json()
-                console.log("Full response object:", json)
-
-                if (response.ok) {
-                   console.log("Pets array:", json.pets)
-                /*
-                    React updates the state
-                    Component re-renders
-                    UI updates automatically
-                */    
-                   setPets(json.pets) // Extract pets array from response and UPDATE state list
-                } else {
-                   console.error("Response not OK:", response.status)
-                }
-            } catch (error) {
-                console.error("Error fetching pets:", error)
-            }
-        }
-
-        fetchPets()
+        refreshLists()
     // Run fetchPets() only once when page loads
     }, [])
 
@@ -60,23 +63,63 @@ const Home = () => {
     // updatedPet comes from PetModal set by update response or delete response
     const handlePetUpdate = (updatedPet) => {
         if (updatedPet === null) {
-            // Pet was deleted
-            setPets(prevPets => 
-                prevPets.filter(p => p._id !== selectedPet._id)
-            )
             setSelectedPet(null)
         } else {
-            // Pet was updated
-            setPets(prevPets => 
-                prevPets.map(p => p._id === updatedPet._id ? updatedPet : p)
-            )
             setSelectedPet(updatedPet)
         }
+        refreshLists()
     }
 
     const handlePetAdded = (newPet) => {
         // Add the new pet to the list
         setPets(prevPets => [...prevPets, newPet])
+        refreshLists()
+    }
+
+    const handleRestore = async (id) => {
+        try {
+            const response = await fetch(`http://localhost:5000/api/pets/${id}/restore`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+
+            if (!response.ok) {
+                alert('Failed to restore pet')
+                return
+            }
+
+            await refreshLists()
+        } catch (error) {
+            console.error('Error restoring pet:', error)
+            alert('Error restoring pet')
+        }
+    }
+
+    const handleHardDeleteFromBin = async (id) => {
+        if (!window.confirm('Permanently delete this pet from bin? This cannot be undone.')) {
+            return
+        }
+
+        try {
+            const response = await fetch(`http://localhost:5000/api/pets/${id}/hard`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+
+            if (!response.ok) {
+                alert('Failed to permanently delete pet')
+                return
+            }
+
+            await refreshLists()
+        } catch (error) {
+            console.error('Error permanently deleting pet:', error)
+            alert('Error permanently deleting pet')
+        }
     }
 
     return (
@@ -102,6 +145,34 @@ const Home = () => {
             </div> 
             
             <button className="cta-button" onClick={() => setShowAddModal(true)}>Add Pet</button>
+            <button className="cta-button" onClick={() => setShowBin(prev => !prev)}>
+                {showBin ? 'Hide Restore Bin' : `Restore Bin (${deletedPets.length})`}
+            </button>
+
+            {showBin && (
+                <div className="restore-bin">
+                    <h2>Restore Bin</h2>
+
+                    {deletedPets.length === 0 ? (
+                        <p>No soft-deleted pets.</p>
+                    ) : (
+                        <div className="bin-list">
+                            {deletedPets.map((pet) => (
+                                <div className="bin-item" key={pet._id}>
+                                    <div>
+                                        <strong>{pet.name}</strong>
+                                        <p>{pet.species} • {pet.breed}</p>
+                                    </div>
+                                    <div className="bin-actions">
+                                        <button className="bin-restore" onClick={() => handleRestore(pet._id)}>Restore</button>
+                                        <button className="bin-hard-delete" onClick={() => handleHardDeleteFromBin(pet._id)}>Hard Delete</button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
             <img src={cat} className="cat" alt="Cat" />
 
             {selectedPet && (

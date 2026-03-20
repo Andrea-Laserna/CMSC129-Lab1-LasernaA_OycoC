@@ -41,6 +41,13 @@ To get the perfect score in the Features Rubrics, your application must have the
 
         You can also try MongoDB (Primary) + Firebase (Backup) to learn the best practices in DB redundancy but this is not required
 
+    Current implementation in this project:
+
+      Soft Delete: implemented via DELETE /api/pets/:id (sets isDeleted=true)
+      Restore: implemented via PATCH /api/pets/:id/restore (sets isDeleted=false)
+      Hard Delete: implemented via DELETE /api/pets/:id/hard (permanent delete)
+      Redundancy: primary/backup automatic failover + failback sync (backup can serve reads/writes when primary is down)
+
 # Pet Health Record App - MERN Stack
 
 ## Tech Stack
@@ -193,12 +200,12 @@ Retrieves all non-deleted pet records from the database.
 #### 2. Get Single Pet
 Retrieves a specific pet record by its ID.
 
-**Endpoint:** `GET /api/:id`
+**Endpoint:** `GET /api/pets/:id`
 
 **Parameters:**
 - `id` (URL parameter) - MongoDB ObjectId of the pet
 
-**Example:** `GET /api/507f1f77bcf86cd799439011`
+**Example:** `GET /api/pets/507f1f77bcf86cd799439011`
 
 **Response:**
 - **Status 201:** Success
@@ -312,12 +319,12 @@ Creates a new pet record in both PRIMARY and BACKUP databases.
 #### 4. Update Pet
 Updates an existing pet record in both databases.
 
-**Endpoint:** `PATCH /api/:id`
+**Endpoint:** `PATCH /api/pets/:id`
 
 **Parameters:**
 - `id` (URL parameter) - MongoDB ObjectId of the pet to update
 
-**Example:** `PATCH /api/507f1f77bcf86cd799439011`
+**Example:** `PATCH /api/pets/507f1f77bcf86cd799439011`
 
 **Request Body:** (all fields optional, only send fields you want to update)
 ```json
@@ -338,7 +345,7 @@ Updates an existing pet record in both databases.
 - `notes` (String)
 
 **Response:**
-- **Status 201:** Success
+- **Status 200:** Success
 ```json
 {
   "pet": {
@@ -380,15 +387,15 @@ Updates an existing pet record in both databases.
 #### 5. Delete Pet (Soft Delete)
 Marks a pet record as deleted without removing it from the database.
 
-**Endpoint:** `DELETE /api/:id`
+**Endpoint:** `DELETE /api/pets/:id`
 
 **Parameters:**
 - `id` (URL parameter) - MongoDB ObjectId of the pet to delete
 
-**Example:** `DELETE /api/507f1f77bcf86cd799439011`
+**Example:** `DELETE /api/pets/507f1f77bcf86cd799439011`
 
 **Response:**
-- **Status 201:** Success
+- **Status 200:** Success
 ```json
 {
   "message": "Pet record deleted successfully",
@@ -428,9 +435,45 @@ Marks a pet record as deleted without removing it from the database.
 - Data remains in database for recovery and audit purposes
 
 **Database Redundancy:**
-- Marks as deleted in PRIMARY database first
-- Immediately syncs the deletion flag to BACKUP database
-- If backup update fails, logs warning but still returns success
+- Marks as deleted in active DB (primary normally; backup during failover)
+- When primary is active, soft-delete state is immediately mirrored to backup
+- During failover, writes happen on backup; once primary recovers, backup data is synced back to primary
+
+---
+
+#### 6. Restore Pet (Undo Soft Delete)
+Restores a soft-deleted pet by setting `isDeleted` back to `false`.
+
+**Endpoint:** `PATCH /api/pets/:id/restore`
+
+**Example:** `PATCH /api/pets/507f1f77bcf86cd799439011/restore`
+
+**Response:**
+- **Status 200:** Success
+```json
+{
+  "message": "Pet restored successfully",
+  "pet": { "_id": "507f1f77bcf86cd799439011", "isDeleted": false }
+}
+```
+
+---
+
+#### 7. Hard Delete Pet (Permanent Delete)
+Permanently removes a pet from the database.
+
+**Endpoint:** `DELETE /api/pets/:id/hard`
+
+**Example:** `DELETE /api/pets/507f1f77bcf86cd799439011/hard`
+
+**Response:**
+- **Status 200:** Success
+```json
+{
+  "message": "Pet permanently deleted",
+  "pet": { "_id": "507f1f77bcf86cd799439011" }
+}
+```
 
 ---
 
